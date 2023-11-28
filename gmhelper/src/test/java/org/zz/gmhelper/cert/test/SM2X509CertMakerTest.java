@@ -8,6 +8,8 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.PEMWriter;
+import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.junit.Assert;
 import org.junit.Test;
 import org.zz.gmhelper.BCECUtil;
@@ -16,7 +18,10 @@ import org.zz.gmhelper.cert.*;
 import org.zz.gmhelper.cert.exception.InvalidX500NameException;
 import org.zz.gmhelper.test.util.FileUtil;
 
+import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.StringWriter;
 import java.security.*;
 import java.security.cert.X509Certificate;
 
@@ -43,6 +48,9 @@ public class SM2X509CertMakerTest {
             byte[] csr = CommonUtil.createCSR(subDN, sm2SubPub, subKP.getPrivate(),
                     SM2X509CertMaker.SIGN_ALGO_SM3WITHSM2).getEncoded();
 
+            // 保存证书请求
+            PKCS10CertificationRequest pkcs10CertRequest = new PKCS10CertificationRequest(csr);
+            saveCSRAsPEM("target/test.sign.pem", pkcs10CertRequest);
             savePriKey("target/test.sm2.pri", (BCECPrivateKey) subKP.getPrivate(),
                     (BCECPublicKey) subKP.getPublic());
 
@@ -54,6 +62,49 @@ public class SM2X509CertMakerTest {
             Assert.fail();
         }
     }
+
+    @Test
+    public void testCSRToPEM() throws Exception {
+        // 生成密钥对
+        KeyPair subKP = SM2Util.generateKeyPair();
+        // 配置DN
+        X500Name subDN = buildSubjectDN();
+        // 构建SM2PublicKey
+        SM2PublicKey sm2SubPub = new SM2PublicKey(subKP.getPublic().getAlgorithm(),
+                (BCECPublicKey) subKP.getPublic());
+        // 创建证书请求
+        byte[] csr = CommonUtil.createCSR(subDN, sm2SubPub, subKP.getPrivate(),
+                SM2X509CertMaker.SIGN_ALGO_SM3WITHSM2).getEncoded();
+        PKCS10CertificationRequest pkcs10CertRequest = new PKCS10CertificationRequest(csr);
+        saveCSRAsPEM("target/test.sign.pem", pkcs10CertRequest);
+        saveCSRAsDER("target/test.sign.der", pkcs10CertRequest);
+    }
+
+    // 将证书请求保存为PEM编码
+    private static void saveCSRAsPEM(String filePath, PKCS10CertificationRequest pkcs10CertRequest) throws IOException {
+        // 将 PKCS#10 证书请求转换为 PEM 格式
+        StringWriter stringWriter = new StringWriter();
+        try (PEMWriter pemWriter = new PEMWriter(stringWriter)) {
+            pemWriter.writeObject(pkcs10CertRequest);
+        }
+
+        // 将 PEM 格式数据写入文件
+        try (FileWriter fileWriter = new FileWriter(filePath)) {
+            fileWriter.write(stringWriter.toString());
+        }
+    }
+
+    // 将证书请求保存为DER编码
+    private static void saveCSRAsDER(String filePath, PKCS10CertificationRequest pkcs10CertRequest) throws IOException {
+        // 将 PKCS#10 证书请求对象转换为 DER 编码的字节数组
+        byte[] derEncoded = pkcs10CertRequest.getEncoded();
+
+        // 将 DER 编码的字节数组保存到文件
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            fos.write(derEncoded);
+        }
+    }
+
 
     public static void savePriKey(String filePath, BCECPrivateKey priKey, BCECPublicKey pubKey) throws IOException {
         ECPrivateKeyParameters priKeyParam = BCECUtil.convertPrivateKeyToParameters(priKey);
